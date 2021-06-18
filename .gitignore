@@ -1,0 +1,6 @@
+*.sw?
+*.asm
+*.gpc
+*.out
+*.meta.json
+*.txt

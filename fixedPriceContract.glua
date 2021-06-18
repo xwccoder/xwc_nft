@@ -1,0 +1,342 @@
+-- ERC721拍卖合约
+-- add this Contract type when only compile by gluac
+type Contract<T> = {
+    storage: T
+}
+
+type Storage = {
+    tokenAddr:string,
+    admin:string,
+    state:string,
+}
+
+
+var M = Contract<Storage>()
+
+function M:init()
+    print("fixed price contract creating")
+    self.storage.tokenAddr=''
+    self.storage.state = 'NOT_INITED'
+    self.storage.admin = caller_address
+    self.storage.feeRate = 5
+    self.storage.totalReward = {}
+    self.storage.currentReward = {}
+    print("fixed price contract created")
+
+end
+
+let function get_from_address()
+    -- 支持合约作为代币持有者
+    var from_address: string
+    let prev_contract_id = get_prev_call_frame_contract_address()
+    if prev_contract_id and is_valid_contract_address(prev_contract_id) then
+        -- 如果来源方是合约时
+        from_address = prev_contract_id
+    else
+        from_address = caller_address
+    end
+    return from_address
+end
+
+
+let function checkAdmin(self: table)
+    if self.storage.admin ~= get_from_address() then
+        return error("you are not admin, can't call this function")
+    end
+end
+
+
+let function checkState(M: table)
+    if M.storage.state ~= 'COMMON' then
+        return error("state error, now state is " .. tostring(M.storage.state))
+    end
+end
+
+let function checkStateInited(self: table)
+    if self.storage.state == 'NOT_INITED' then
+        return error("contract token not inited")
+    end
+end
+
+
+-- parse a,b,c format string to [a,b,c]
+let function parse_args(arg: string, count: int, error_msg: string)
+    if not arg then
+        return error(error_msg)
+    end
+    let parsed = string.split(arg, ',')
+    if (not parsed) or (#parsed ~= count) then
+        return error(error_msg)
+    end
+    return parsed
+end
+
+
+let function parse_at_least_args(arg: string, count: int, error_msg: string)
+    if not arg then
+        return error(error_msg)
+    end
+    let parsed = string.split(arg, ',')
+    if (not parsed) or (#parsed < count) then
+        return error(error_msg)
+    end
+    return parsed
+end
+
+let function updateReward(amount:integer,symbol:string)
+    if     self.storage.totalReward[symbol] then
+        self.storage.totalReward[symbol] = tointeger(self.storage.totalReward[symbol]) + tointeger(amount)
+    else
+        self.storage.totalReward[symbol] = tointeger(amount)
+    end
+
+    if     self.storage.currentReward[symbol] then
+        self.storage.currentReward[symbol] = tointeger(self.storage.currentReward[symbol]) + tointeger(amount)
+    else
+        self.storage.currentReward[symbol] = tointeger(amount)
+    end
+
+end
+
+let function checkAddress(addr: string)
+    let result = is_valid_address(addr)
+    if not result then
+        return error("address format error")
+    end
+    return result
+end
+
+let function getArrayIdx(array:table, key:string)
+	let count = #array
+	let idx = tointeger("1")
+	while idx<=count do
+		if array[idx]==key then
+			return idx
+		end
+		idx=idx+1
+	end
+	return 0
+end
+
+
+let  function require(success:bool,text: string)
+    if success then
+        return true
+    else
+        return error(text)
+    end
+
+end
+
+
+let function checkContractAddress(addr: string)
+    let result = is_valid_contract_address(addr)
+    if not result then
+        return error("contract address format error")
+    end
+    return result
+end
+
+
+let function withdraw_native_asset_private(self:table,from:string,symbol:string,amountStr:string)
+    checkState(self)	
+
+    let amount = tointeger(amountStr)
+
+    if (not symbol) or (#symbol < 1) or (not amount) or (amount <= 0) then
+        return error("invalid params")
+    end
+    let fromAddress = from
+    let userAssets: table = json.loads(fast_map_get('_nativeBalances', fromAddress) or '{}') or {}
+    let oldBalance = tointeger(userAssets[symbol] or 0)
+    if oldBalance < amount then
+        return error("amount exceed balance")
+    end
+    let newBalance = oldBalance - amount
+    userAssets[symbol] = newBalance
+    let newUserAssetsStr = json.dumps(userAssets)
+
+    fast_map_set('_nativeBalances', fromAddress, newUserAssetsStr)
+
+    let res1 = transfer_from_contract_to_address(fromAddress, symbol, amount)
+	if res1 ~= 0 then
+		return error("transfer asset " .. symbol .. " to " .. fromAddress .. " amount:"..tostring(amount).." error, error code: " .. tostring(res1))
+    end	
+    
+    let nativeTransferEventArg = json.dumps({
+        address: fromAddress,
+        symbol: symbol,
+        change: - amount,
+        reason: 'withdraw'
+    })
+    emit NativeBalanceChange(nativeTransferEventArg)
+
+end
+
+let function _buyNft(self:table,tokenAddr:string,tokenId:string,symbol:string,amount:string)
+    let from_addr  = get_from_address()
+    let tokenId = tostring(parsed[2])
+    let tokenIdx = tokenAddr.."."..tokenId
+    let tokenInfoStr = fast_map_get("token_list",tokenIdx) or "{}"
+    require(tokenInfoStr ~= "{}","token with Id not in sell list")
+    let tokenInfo = json.loads(tokenInfoStr)
+    let amountInt = tointeger(amount)
+    require(tokenInfo.symbol == symbol, "token sell in different symbol")
+    require(tokenInfo.price <= amountInt, "not match price")
+    let ERC721Object:object = import_contract_from_address(tokenAddr)
+    --let owner = ERC721Object:ownerOf(tokenId)
+    require(ERC721Object:supportsERC721Interface(),"tokenContract does not support ERC721 interface")
+    let tokenData = json.loads(ERC721Object:queryTokenMinter(tokenId) or {})
+    require( not tokenData["minter"] ,"Unknown interface error")
+    let copyRightFeeRate = tokenData["fee"]
+    let tokenMinter = tokenData["minter"]
+    let closePrice = tointeger(tokenInfo.price)
+    let writePrice = tointeger(tokenInfo.price - safemath.number_toint(
+        safemath.number_div(
+            safemath.number_multiply(
+                safemath.safenumber(closePrice),
+                safenumber.safenumber(self.storage.feeRate)
+            ),
+            safemath.safenumber(100))))
+    let copyRightFee = safemath.toint(safemath.div(
+        safemath.mul(
+            safemath.bigint(writePrice),
+            safemath.bigint(copyRightFeeRate)),
+        safemath.bigint(100)))
+    let payValue = writePrice - copyRightFee
+    updateReward(closePrice-writePrice, tokenInfo.symbol)
+    ERC721Object:feedTradePrice(tokenId..","..tokenInfo.symbol..","..tostring(writePrice))
+    withdraw_native_asset_private(self, tokenInfo.tokenOwner, tokenInfo.symbol, tostring(payValue))
+    if tointeger(copyRightFee)>tointeger(0) then 
+        withdraw_native_asset_private(self, tokenMinter, tokenInfo.symbol, copyRightFee)
+    end
+    fast_map_set("token_list", tokenIdx, "{}")
+    let tokensStr = fast_map_get("user_tokens", tokenInfo.tokenOwner)
+    userTokens = json.loads(tokensStr)
+    let idx = tointeger(getArrayIdx(userTokens, tokenIdx))
+    require(idx > 0, "token idx not exist in user token list")
+    table.remove(userTokens, idx)
+    fast_map_set("user_tokens", json.dumps(userTokens))
+    let curContract = get_current_contract_address()
+    ERC721Object:safeTransferFrom(curContract..","..from_addr..","..tokenId)
+
+    let eventArg = json.dumps({tokenAddr:tokenAddr,tokenId:tokenId,seller:tokenInfo.tokenOwner,buyer:from_addr,payValue:payValue,copyRightFee:copyRightFee})
+    emit DealEvent(eventArg)
+end
+
+
+function M:init_config(arg:string)
+    checkAdmin(self)
+    if self.storage.state ~= 'NOT_INITED' then
+        return error("this token contract inited before")
+    end
+     let parsed = parse_args(arg, 2, "argument format error, need format: token_addr,time_buffer")
+    let info = {token_addr: parsed[1], time_buffer: parsed[2]}
+
+    self.storage.tokenAddr=info.token_addr
+    let from_address = get_from_address()
+    if from_address ~= caller_address then
+        return error("init_token can't be called from other contract")
+    end
+    self.storage.state = 'COMMON'
+    self.storage.admin = caller_address
+    self.storage.feeRate = 5
+    self.storage.totalReward = {}
+    self.storage.currentReward = {}
+end
+
+offline function M:supportsERC721Interface(arg:string)
+    return true
+end
+
+
+-- tokenId,tokenAddr,price,symbol
+function M:sellNft(arg:string)
+    checkState(self)
+    let parsed = parse_args(args, 6, "argument format error, need format: tokenId,tokenAddr,duration,reservePrice,symbol,minDeltaPrice")
+    let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[4], symbol: parsed[5]}
+    let from_addr = get_from_address()
+    let ERC721Object: object = import_contract_from_address(info.tokenAddr)
+    let owner = ERC721Object:ownerOf(tokenId)
+    require(owner == from_addr or owner == ERC721Object:getApproved(tokenId),"Caller must be approved or owner for token id")
+    require(ERC721Object:supportsERC721Interface(),"tokenContract does not support ERC721 interface")
+    let cur_contract = get_current_contract_address()
+    ERC721Object:transferFrom(owner..","..cur_contract..","..info.tokenId)
+    let askData = {tokenId:info.tokenId,tokenContract:info.tokenAddr,price:info.price,tokenOwner:from_addr,symbol:info.symbol}
+    let tokenIdx = info.tokenAddr.."."..info.tokenId
+    fast_map_set("token_list",tostring(tokenIdx),json.dumps(askData))
+    let userTokensStr = fast_map_get("user_tokens", from_addr) or '[]'
+    userTokens = json.loads(userTokensStr)
+    table.append(userTokens, tokenIdx)
+    fast_map_set("user_tokens", tostring(info.from_addr), json.dumps(userTokens))
+    let eventArg = json.dumps({
+        tokenId:info.tokenId,
+        tokenContract:info.tokenAddr,
+        price:info.price,
+        tokenOwner:from_addr,
+        symbol:info.symbol
+    })
+    emit AskCreated(eventArg)
+    return info.tokenId
+end
+
+-- tokenAddr,tokenId
+function M:on_deposit_asset(jsonstrArgs: string)
+    checkState(self)	
+	let arg = json.loads(jsonstrArgs)
+    let amount = tostring(arg.num)
+    let symbol = tostring(arg.symbol)
+    let param = tostring(arg.param)
+	if (not amount) or (amount < 0) then
+		 return error("deposit should greater than 0")
+	end
+	if (not symbol) or (#symbol < 1) then
+		 return error("on_deposit_asset arg wrong")
+    end
+    let parsed = parse_args(param, 2, "argument format error, need format: tokenAddr,tokenId")
+    let tokenAddr=tostring(parsed[1])
+    let tokenId = tostring(parsed[2])
+    _buyNft(self, tokenAddr, tokenId, symbol, amount)
+end
+
+offline function M:getTokenInfo(tokenAddr:string, tokenId:string)
+    let tokenIdx = tokenAddr.."."..tokenId
+    let data = fast_map_get("tokenList",tokenIdx) or "{}"
+    return data
+end
+
+function M:setFeeRate(fee:string)
+    checkAdmin(self)
+    require( tointeger(fee) >= tointeger(0) and tointeger(fee) <= tointeger(50)  )
+    self.storage.feeRate = tointeger(fee)
+    return 
+
+end
+
+-- amount,symbol
+function M:withdrawReward(args:string)
+    checkAdmin(self)
+    let parsed = parse_args(args, 2, "argument format error, need format: amount,symbol")
+    let amount = tointeger(parsed[1])
+    let symbol = tostring(parsed[2])
+    let from_addr = get_from_address()
+    require(amount>tointeger(0),"amount must positive")
+    updateReward(-amount,symbol)
+    withdraw_native_asset_private(self,from_addr,symbol,amount)
+    let eventArg = json.dumps({amount:amount,symbol:symbol,admin:from_addr})
+    emit AdminWithdrawReward(eventArg)
+end
+
+offline function M:getInfo()
+    let info = {}
+    info["state"] =self.storage.state
+    info["admin"] =self.storage.admin
+    info["feeRate"] =self.storage.feeRate
+    info["totalReward"] =self.storage.totalReward
+    info["currentReward"] =self.storage.currentReward
+  
+    return json.dumps(info)
+
+end
+
+return M
