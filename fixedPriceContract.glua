@@ -15,8 +15,7 @@ var M = Contract<Storage>()
 
 function M:init()
     print("fixed price contract creating")
-    self.storage.tokenAddr=''
-    self.storage.state = 'NOT_INITED'
+    self.storage.state = 'COMMON'
     self.storage.admin = caller_address
     self.storage.feeRate = 5
     self.storage.totalReward = {}
@@ -225,26 +224,6 @@ let function _buyNft(self:table,tokenAddr:string,tokenId:string,symbol:string,am
 end
 
 
-function M:init_config(arg:string)
-    checkAdmin(self)
-    if self.storage.state ~= 'NOT_INITED' then
-        return error("this token contract inited before")
-    end
-     let parsed = parse_args(arg, 2, "argument format error, need format: token_addr,time_buffer")
-    let info = {token_addr: parsed[1], time_buffer: parsed[2]}
-
-    self.storage.tokenAddr=info.token_addr
-    let from_address = get_from_address()
-    if from_address ~= caller_address then
-        return error("init_token can't be called from other contract")
-    end
-    self.storage.state = 'COMMON'
-    self.storage.admin = caller_address
-    self.storage.feeRate = 5
-    self.storage.totalReward = {}
-    self.storage.currentReward = {}
-end
-
 offline function M:supportsERC721Interface(arg:string)
     return true
 end
@@ -253,8 +232,8 @@ end
 -- tokenId,tokenAddr,price,symbol
 function M:sellNft(arg:string)
     checkState(self)
-    let parsed = parse_args(args, 6, "argument format error, need format: tokenId,tokenAddr,duration,reservePrice,symbol,minDeltaPrice")
-    let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[4], symbol: parsed[5]}
+    let parsed = parse_args(args, 4, "argument format error, need format: tokenId,tokenAddr,price,symbol")
+    let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[3], symbol: parsed[4]}
     let from_addr = get_from_address()
     let ERC721Object: object = import_contract_from_address(info.tokenAddr)
     let owner = ERC721Object:ownerOf(tokenId)
@@ -299,12 +278,6 @@ function M:on_deposit_asset(jsonstrArgs: string)
     _buyNft(self, tokenAddr, tokenId, symbol, amount)
 end
 
-offline function M:getTokenInfo(tokenAddr:string, tokenId:string)
-    let tokenIdx = tokenAddr.."."..tokenId
-    let data = fast_map_get("tokenList",tokenIdx) or "{}"
-    return data
-end
-
 function M:setFeeRate(fee:string)
     checkAdmin(self)
     require( tointeger(fee) >= tointeger(0) and tointeger(fee) <= tointeger(50)  )
@@ -325,6 +298,15 @@ function M:withdrawReward(args:string)
     withdraw_native_asset_private(self,from_addr,symbol,amount)
     let eventArg = json.dumps({amount:amount,symbol:symbol,admin:from_addr})
     emit AdminWithdrawReward(eventArg)
+end
+
+offline function M:getTokenInfo(args:string)
+    let parsed = parse_args(args, 2, "argument format error, need format: owner,operator")
+    let tokenAddr = tostring(parsed[1])
+    let tokenId = tostring(parsed[2])
+    let tokenIdx = tokenAddr.."."..tokenId
+    let data = fast_map_get("tokenList",tokenIdx) or "{}"
+    return data
 end
 
 offline function M:getInfo()
