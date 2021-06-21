@@ -317,7 +317,7 @@ function M:endAuction(auctionId:string)
     let copyRightPayFee = tokenData["fee"]
     let tokenMinter = tokenData["minter"]
     let close_price = tointeger(auctionObject.amount )
-    let write_price =  tointeger( close_price -  safemath.number_toint( safemath.number_div( safemath.number_multiply( safemath.safenumber(close_price), safenumber.safenumber( self.storage.feeRate)) ,safemath.safenumber(100))))
+    let write_price =  tointeger( close_price -  safemath.number_toint( safemath.number_div( safemath.number_multiply( safemath.safenumber(close_price), safemath.safenumber( self.storage.feeRate)) ,safemath.safenumber(100))))
     let copyRightFee = safemath.toint( safemath.div( safemath.mul( safemath.bigint(write_price),safemath.bigint(copyRightPayFee)),safemath.bigint(100)))
     let pay_value = write_price - copyRightFee
     updateReward(close_price-write_price,auctionObject.symbol)

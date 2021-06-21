@@ -8,6 +8,9 @@ type Storage = {
     tokenAddr:string,
     admin:string,
     state:string,
+    feeRate:int,
+    totalReward:Map<string>,
+    currentReward:Map<string>
 }
 
 
@@ -174,7 +177,6 @@ end
 
 let function _buyNft(self:table,tokenAddr:string,tokenId:string,symbol:string,amount:string)
     let from_addr  = get_from_address()
-    let tokenId = tostring(parsed[2])
     let tokenIdx = tokenAddr.."."..tokenId
     let tokenInfoStr = fast_map_get("token_list",tokenIdx) or "{}"
     require(tokenInfoStr ~= "{}","token with Id not in sell list")
@@ -194,7 +196,7 @@ let function _buyNft(self:table,tokenAddr:string,tokenId:string,symbol:string,am
         safemath.number_div(
             safemath.number_multiply(
                 safemath.safenumber(closePrice),
-                safenumber.safenumber(self.storage.feeRate)
+                safemath.safenumber(self.storage.feeRate)
             ),
             safemath.safenumber(100))))
     let copyRightFee = safemath.toint(safemath.div(
@@ -211,7 +213,7 @@ let function _buyNft(self:table,tokenAddr:string,tokenId:string,symbol:string,am
     end
     fast_map_set("token_list", tokenIdx, "{}")
     let tokensStr = fast_map_get("user_tokens", tokenInfo.tokenOwner)
-    userTokens = json.loads(tokensStr)
+    let userTokens = json.loads(tokensStr)
     let idx = tointeger(getArrayIdx(userTokens, tokenIdx))
     require(idx > 0, "token idx not exist in user token list")
     table.remove(userTokens, idx)
@@ -230,14 +232,14 @@ end
 
 
 -- tokenId,tokenAddr,price,symbol
-function M:sellNft(arg:string)
+function M:sellNft(args:string)
     checkState(self)
     let parsed = parse_args(args, 4, "argument format error, need format: tokenId,tokenAddr,price,symbol")
     let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[3], symbol: parsed[4]}
     let from_addr = get_from_address()
     let ERC721Object: object = import_contract_from_address(info.tokenAddr)
-    let owner = ERC721Object:ownerOf(tokenId)
-    require(owner == from_addr or owner == ERC721Object:getApproved(tokenId),"Caller must be approved or owner for token id")
+    let owner = ERC721Object:ownerOf(info.tokenId)
+    require(owner == from_addr or owner == ERC721Object:getApproved(info.tokenId),"Caller must be approved or owner for token id")
     require(ERC721Object:supportsERC721Interface(),"tokenContract does not support ERC721 interface")
     let cur_contract = get_current_contract_address()
     ERC721Object:transferFrom(owner..","..cur_contract..","..info.tokenId)
@@ -245,7 +247,7 @@ function M:sellNft(arg:string)
     let tokenIdx = info.tokenAddr.."."..info.tokenId
     fast_map_set("token_list",tostring(tokenIdx),json.dumps(askData))
     let userTokensStr = fast_map_get("user_tokens", from_addr) or '[]'
-    userTokens = json.loads(userTokensStr)
+    let userTokens = json.loads(userTokensStr)
     table.append(userTokens, tokenIdx)
     fast_map_set("user_tokens", tostring(info.from_addr), json.dumps(userTokens))
     let eventArg = json.dumps({
