@@ -79,17 +79,17 @@ def generate_block_10():
     else:
         time.sleep(50)
 
-#发布合约 参数是合约文件路径
-def deploy_contract(contract_path):
+def deploy_contract(contractFile):
+    import os
+    gpcPath = os.path.abspath(os.path.join(os.getcwd(), ".."))
+    contractPath = os.path.abspath(os.path.join(gpcPath, contractFile))
     if is_simplechain:
-        res = request("create_contract_from_file",["test",contract_path,1000000,10000])
+        res = request("create_contract_from_file",["test",contractPath,1000000,10000])
         generate_block()
-        print(contract_path)
-        print(res)
-        print("deploy_contract",res["result"]["contract_address"])
+        print("deploy_contract",res["result"])
         return res["result"]["contract_address"]
     else:
-        res = request("register_contract", ["test", "0.00001", 500000, contract_path])
+        res = request("register_contract", ["test", "0.00001", 500000, contractPath])
         print(res["result"]["contract_id"])
         generate_block()
         return res["result"]["contract_id"]
@@ -145,7 +145,7 @@ def do_init():
             generate_block()
     global token_addr
     if token_addr == "":
-        nft_gpc_path = "F:/work/code/xwc_nft/erc721_forever_reward.glua.gpc"
+        nft_gpc_path = "erc721_forever_reward.glua.gpc"
         token_addr = deploy_contract(nft_gpc_path)
 
 def balanceOf(account,owner):

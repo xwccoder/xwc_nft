@@ -6,7 +6,6 @@ import json
 import base64
 import random
 import math
-import pytest
 import unittest
 import time
 
@@ -73,15 +72,17 @@ def generate_block_10():
     else:
         time.sleep(50)
 
-#发布合约 参数是合约文件路径
-def deploy_contract(contract_path):
+def deploy_contract(contractFile):
+    import os
+    gpcPath = os.path.abspath(os.path.join(os.getcwd(), ".."))
+    contractPath = os.path.abspath(os.path.join(gpcPath, contractFile))
     if is_simplechain:
-        res = request("create_contract_from_file",["test",contract_path,1000000,10000])
+        res = request("create_contract_from_file",["test",contractPath,1000000,10000])
         generate_block()
         print("deploy_contract",res["result"])
         return res["result"]["contract_address"]
     else:
-        res = request("register_contract", ["test", "0.00001", 500000, contract_path])
+        res = request("register_contract", ["test", "0.00001", 500000, contractPath])
         print(res["result"]["contract_id"])
         generate_block()
         return res["result"]["contract_id"]
@@ -139,10 +140,10 @@ def do_init():
     global token_addr
     global ex_addr
     if token_addr == "":
-        token_addr = deploy_contract("F:/work/code/xwc_nft/erc721_forever_reward.glua.gpc")
+        token_addr = deploy_contract("erc721_forever_reward.glua.gpc")
     print(token_addr)
     if ex_addr == "":
-        ex_addr = deploy_contract("F:/work/code/xwc_nft/fixedPriceContract.glua.gpc")
+        ex_addr = deploy_contract("fixedPriceContract.glua.gpc")
 
 
 def balanceOf(account,owner):
@@ -225,7 +226,10 @@ class FixedPriceTest(unittest.TestCase):
         generate_block()
         invoke_contract("test", token_addr, "setFixedSellContract", ex_addr)
         generate_block()
-        
+        self.token2Id = {
+            "XWC": 1,
+            "ETH": 2
+        }
 
     def check_test_token_match(self):
         tokens = queryAllTokenIds("test")
@@ -240,9 +244,17 @@ class FixedPriceTest(unittest.TestCase):
             print("check_test_token_match", tokens, _all_test_tokens)
             return  False
 
-
-    def test_normal_trade(self):
-        tokenId = "token1"
+    def trade_base(self, tokenAddr, tokenId, price, symbol):
+        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        infoStart = json.loads(res['result']['api_result'])
+        if isinstance(infoStart['totalReward'],list):
+            infoStart['totalReward'] = {}
+            infoStart['totalReward'][symbol] = 0
+            infoStart['currentReward'] = {}
+            infoStart['currentReward'][symbol] = 0
+        elif symbol not in infoStart['totalReward']:
+            infoStart['totalReward'][symbol] = 0
+            infoStart['currentReward'][symbol] = 0            
         assert mint("test", tokenId) == True
         generate_block()
         owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
@@ -250,25 +262,44 @@ class FixedPriceTest(unittest.TestCase):
         assert approve("test", ex_addr, tokenId) == True
         generate_block()
         assert getApproved(tokenId) == ex_addr
-        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},10000000,XWC")
+        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{tokenAddr},{price},{symbol}")
         generate_block()
-        owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
+        owner = invoke_contract_offline("test", tokenAddr, "ownerOf", tokenId)
         assert owner["result"]["api_result"] == ex_addr
-        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
+        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{tokenAddr},{tokenId}")
         tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
-        assert tokenInfo["price"] == "10000000"
-        deposit_contract("test1", ex_addr, f"{token_addr},{tokenId}", 10000000, 1)
+        assert tokenInfo["price"] == f"{price}"
+        deposit_contract("test1", ex_addr, f"{tokenAddr},{tokenId}", price, self.token2Id[symbol])
         generate_block()
         res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        info = json.loads(res['result']['api_result'])
-        assert info["totalReward"]["XWC"] == 500000
-        assert info["currentReward"]["XWC"] == 500000
-        invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
+        infoEnd = json.loads(res['result']['api_result'])
+        print(infoEnd)
+        print(infoEnd["totalReward"][symbol])
+        assert infoEnd["totalReward"][symbol] == int(price * infoStart["feeRate"] / 100) + infoStart["totalReward"][symbol]
+        assert infoEnd["currentReward"][symbol] == int(price * infoStart["feeRate"] / 100) + infoStart["currentReward"][symbol]
+        invoke_contract("test", ex_addr, "withdrawReward", f"1,{symbol}")
         generate_block()
         res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        info = json.loads(res['result']['api_result'])
-        assert info["totalReward"]["XWC"] == 500000
-        assert info["currentReward"]["XWC"] == 499999
+        infoLast = json.loads(res['result']['api_result'])
+        assert infoLast["totalReward"][symbol] == infoEnd["totalReward"][symbol]
+        assert infoLast["currentReward"][symbol] == infoEnd["currentReward"][symbol] - 1
+
+    def test_normalTrade(self):
+        self.trade_base(token_addr, "token1", 10000000, "XWC")
+        self.trade_base(token_addr, "token2", 100, "ETH")
+
+    def  test_errorSymbolTrade(self):
+        tokenId = "error1"
+        price = 10000
+        symbol = 'XWC'
+        assert mint("test", tokenId) == True
+        generate_block()
+        assert approve("test", ex_addr, tokenId) == True
+        generate_block()
+        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},{price},{symbol}")
+        generate_block()
+        res = deposit_contract("test1", ex_addr, f"{token_addr},{tokenId}", price, 2)
+        assert res['result']['error'] == "token sell in different symbol"
 
     def test_setFeeRate(self):
         res = invoke_contract("test", ex_addr, "setFeeRate", "-1")
@@ -283,7 +314,8 @@ class FixedPriceTest(unittest.TestCase):
 
 def suite():
     s = unittest.TestSuite()
-    s.addTest(FixedPriceTest("test_normal_trade"))
+    s.addTest(FixedPriceTest("test_normalTrade"))
+    s.addTest(FixedPriceTest("test_errorSymbolTrade"))
     s.addTest(FixedPriceTest("test_setFeeRate"))
     return s
 
