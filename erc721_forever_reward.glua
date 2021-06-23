@@ -505,7 +505,7 @@ offline function M:ownerOf(tokenId:string)
     checkStateInited(self)
     let owner = fast_map_get("_owners",tokenId) or ""
     if owner == "" then
-        return error("ERC721: owner query for nonexistent toke")
+        return error("ERC721: owner query for nonexistent token")
     end
     return tostring(owner)
 
@@ -750,7 +750,7 @@ end
 
 
 function M:feedTradePrice(args:string)
-    let parsed = parse_args(args, 2, "argument format error, need format: tokenId,symbol,amount")
+    let parsed = parse_args(args, 3, "argument format error, need format: tokenId,symbol,amount")
     let tokenId = tostring(parsed[1])
     let symbol = tostring(parsed[2])
     let amount = tointeger(parsed[3])

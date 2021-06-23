@@ -40,7 +40,7 @@ def request(method,params):
     }
 
     response = requests.request("POST", url, data=payload, headers=headers)
-    #print(response.text)
+    # print(response.text)
     return json.loads(response.text)
 
 # 初始化simplechain 测试环境
@@ -78,7 +78,7 @@ def deploy_contract(contract_path):
     if is_simplechain:
         res = request("create_contract_from_file",["test",contract_path,1000000,10000])
         generate_block()
-        print("deploy_contract",res["result"]["contract_address"])
+        print("deploy_contract",res["result"])
         return res["result"]["contract_address"]
     else:
         res = request("register_contract", ["test", "0.00001", 500000, contract_path])
@@ -114,40 +114,42 @@ def invoke_contract_offline(account_name,contract_addr,method,params):
 
 def deposit_contract(account_addr,contract_addr,param,asset_id=0,amount=0):
     if is_simplechain:
-        res = request("invoke_contract", [account_addr, contract_addr, "on_deposit_asset", [param], asset_id, amount, 5000000, 1])
+        res = request("invoke_contract", [account_addr, contract_addr, "on_deposit_asset", [param], amount, asset_id, 5000000, 1])
         return res
     else:
         res = request("transfer_to_contract",
-                      [account_addr, contract_addr, "%.8f" % (float(amount) / 100000000),asset_id_tab[asset_id], "", "0.00000001", 500000,
-                       "true"])
-        return res
+                        [account_addr, contract_addr, "%.8f" % (float(amount) / 100000000), asset_id, param, "0.00000001", 500000,
+                        "true"])
+    return res
 
 def getStorage(contract_addr,storage_name):
     res = request("get_storage", [contract_addr, storage_name])["result"]
     return res
+
 def query_native_balance(account_name="test"):
     res= request("get_account_balances",[account_name])
-    print(res)
+    return res
 
 def do_init():
     if is_simplechain:
         a = query_native_balance("test")
-        print(a)
-        if a ==0:
+        if a is None or a == 0:
             init_simple_chain_env()
             generate_block()
     global token_addr
     global ex_addr
     if token_addr == "":
         token_addr = deploy_contract("F:/work/code/xwc_nft/erc721_forever_reward.glua.gpc")
+    print(token_addr)
     if ex_addr == "":
         ex_addr = deploy_contract("F:/work/code/xwc_nft/fixedPriceContract.glua.gpc")
+
 
 def balanceOf(account,owner):
     return int(invoke_contract_offline(account,token_addr,"balanceOf",owner)["result"]["api_result"])
 
-def mint(account,tokenId):
-    res = invoke_contract(account,token_addr,"mint","%s,%s,10"%(account,tokenId))
+def mint(account, tokenId, feeRate=10):
+    res = invoke_contract(account,token_addr,"mint","%s,%s,%s"%(account,tokenId,feeRate))
     return res["result"]["exec_succeed"]
 
 def safeMint(account,tokenId):
@@ -158,7 +160,7 @@ def safeMint(account,tokenId):
 def transferFrom(account,_from,to,tokenId):
     print("%s,%s,%s"%(_from,to,tokenId))
     res = invoke_contract(account,token_addr,"transferFrom","%s,%s,%s"%(_from,to,tokenId))
-
+    print(res)
     return res["result"]["exec_succeed"]
 
 def safeTransferFrom(account,_from,to,tokenId):
@@ -221,6 +223,8 @@ class FixedPriceTest(unittest.TestCase):
         do_init()
         invoke_contract("test", token_addr, "init_token", "WORLD,WORLD")
         generate_block()
+        invoke_contract("test", token_addr, "setFixedSellContract", ex_addr)
+        generate_block()
         
 
     def check_test_token_match(self):
@@ -239,54 +243,57 @@ class FixedPriceTest(unittest.TestCase):
 
     def test_normal_trade(self):
         tokenId = "token1"
-        invoke_contract("test",token_addr,"mint","test,{tokenId},10")
+        assert mint("test", tokenId) == True
         generate_block()
+        owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
+        assert owner["result"]["api_result"] == "test"
+        assert approve("test", ex_addr, tokenId) == True
+        generate_block()
+        assert getApproved(tokenId) == ex_addr
         invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},10000000,XWC")
         generate_block()
+        owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
+        assert owner["result"]["api_result"] == ex_addr
         tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
-        print(tokenInfoStr)
-        # tokenInfo = json.loads(tokenInfoStr)
-        # assert tokenInfo["price"] == 10
-        deposit_contract("test1", ex_addr, f"{token_addr},{tokenId}", 1, 10000000)
+        tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
+        assert tokenInfo["price"] == "10000000"
+        deposit_contract("test1", ex_addr, f"{token_addr},{tokenId}", 10000000, 1)
         generate_block()
-        infoStr = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        print(infoStr)
-        info = json.loads(infoStr)
-        # assert info["totalReward"] == 500000
+        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        info = json.loads(res['result']['api_result'])
+        assert info["totalReward"]["XWC"] == 500000
+        assert info["currentReward"]["XWC"] == 500000
+        invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
+        generate_block()
+        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        info = json.loads(res['result']['api_result'])
+        assert info["totalReward"]["XWC"] == 500000
+        assert info["currentReward"]["XWC"] == 499999
 
-
- 
-
-    # def test_offline_function(self):
-    #     res = invoke_contract_offline("test",token_addr,"supportsERC721Interface","")
-    #     print(res["result"]["api_result"])
-    #     assert res["result"]["exec_succeed"]
-    #     res = invoke_contract_offline("test",token_addr,"tokenName","")
-    #     assert res["result"]["api_result"] == "WORLD"
-    #     mint("testaaa","yilixiaoshazi_own")
-    #     generate_block()
-    #     res = invoke_contract_offline("test",token_addr,"ownerOf","yilixiaoshazi_own")
-    #     assert res["result"]["api_result"] == "testaaa"
-    #     res = invoke_contract_offline("test", token_addr, "symbol", "")
-    #     assert res["result"]["api_result"] == "WORLD"
-
-
-
+    def test_setFeeRate(self):
+        res = invoke_contract("test", ex_addr, "setFeeRate", "-1")
+        assert res['result']['error'] == 'invalid fee rate: -1'
+        res = invoke_contract("test", ex_addr, "setFeeRate", "0")
+        assert res['result']['exec_succeed'] == True
+        res = invoke_contract("test", ex_addr, "setFeeRate", "50")
+        assert res['result']['exec_succeed'] == True
+        res = invoke_contract("test", ex_addr, "setFeeRate", "51")
+        assert res['result']['error'] == 'invalid fee rate: 51'
 
 
 def suite():
-    tests = [
-        "test_normal_trade",
-    ]
-    return unittest.TestSuite(map("main", tests))
+    s = unittest.TestSuite()
+    s.addTest(FixedPriceTest("test_normal_trade"))
+    s.addTest(FixedPriceTest("test_setFeeRate"))
+    return s
 
 
 if __name__ == "__main__":
-    suite()
+    s = suite()
+    runner = unittest.TextTestRunner()
+    runner.run(s)
     token_addr = ""
     current_block = 0
-#
-#     print(base64.b64encode(('%s:%s' % ("a", "b")).encode(encoding='utf-8')))
 
 
 

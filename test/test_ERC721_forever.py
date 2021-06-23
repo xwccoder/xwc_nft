@@ -84,6 +84,8 @@ def deploy_contract(contract_path):
     if is_simplechain:
         res = request("create_contract_from_file",["test",contract_path,1000000,10000])
         generate_block()
+        print(contract_path)
+        print(res)
         print("deploy_contract",res["result"]["contract_address"])
         return res["result"]["contract_address"]
     else:
@@ -133,18 +135,18 @@ def getStorage(contract_addr,storage_name):
     return res
 def query_native_balance(account_name="test"):
     res= request("get_account_balances",[account_name])
-    print(res)
+    return res
 
 def do_init():
     if is_simplechain:
         a = query_native_balance("test")
-        print(a)
-        if a ==0:
+        if a is None:
             init_simple_chain_env()
             generate_block()
     global token_addr
     if token_addr == "":
-        token_addr = deploy_contract("H:/XWC/xwc_nft/erc721_forever_reward.glua.gpc")
+        nft_gpc_path = "F:/work/code/xwc_nft/erc721_forever_reward.glua.gpc"
+        token_addr = deploy_contract(nft_gpc_path)
 
 def balanceOf(account,owner):
     return int(invoke_contract_offline(account,token_addr,"balanceOf",owner)["result"]["api_result"])
@@ -180,6 +182,10 @@ def approve(account,to,tokenId):
 
 def ownerOf(account,tokenId):
     res = invoke_contract_offline(account,token_addr,"ownerOf","%s"%tokenId)
+    return res["result"]["api_result"]
+
+def queryTokenMinter(account, tokenId):
+    res = invoke_contract_offline(account,token_addr,"queryTokenMinter","%s"%tokenId)
     return res["result"]["api_result"]
 
 def setApprovalForAll(account,operator,open):
@@ -218,7 +224,7 @@ def isApprovedForAll(owner,spender):
     print("isApprovedForAll",res)
     return res["result"]["api_result"]
 
-class ERC721Test(unittest.TestCase):
+class ERC721ForeverTest(unittest.TestCase):
     def __init__(self,*args, **kwargs):
         super().__init__(*args, **kwargs)
         do_init()
@@ -246,8 +252,10 @@ class ERC721Test(unittest.TestCase):
         _all_test_tokens.append("aaasssa")
         generate_block()
         res = queryAllTokenIds("test")
-
         assert "aaasssa" in res
+        minterStr = queryTokenMinter("test", "aaasssa")
+        minter = json.loads(minterStr)
+        assert minter["minter"] == "test"
 
     def test_mint2(self):
         invoke_contract("test", token_addr, "mint", "test,aaasssab,10")
@@ -256,7 +264,6 @@ class ERC721Test(unittest.TestCase):
 
         res = queryAllTokenIds("test")
 
-        assert "aaasssa" in res
         assert "aaasssab" in res
 
 
@@ -310,6 +317,7 @@ class ERC721Test(unittest.TestCase):
         assert setApprovalForAll("test", "approve", False) == True
         generate_block()
         assert transferFrom("approve","test","approve","yilixiaoshazi2")==False
+
     def test_token_uri(self):
         for one_key in _all_test_tokens:
             res = invoke_contract_offline("test",token_addr,"tokenURI",one_key)
@@ -345,7 +353,7 @@ class ERC721Test(unittest.TestCase):
         assert totalSupply() - count ==1
 
     def test_safeMint(self):
-        res = deploy_contract("H:/XWC/xwc_swap/newtoken.glua.gpc")
+        res = deploy_contract("f:/work/code/xwc_nft/newtoken.glua.gpc")
         assert safeMint(res,"yilixiaoshazi-contract") ==False
         generate_block()
         assert safeMint("testsafe","yilixiaoshazi-contract") == True
@@ -355,7 +363,7 @@ class ERC721Test(unittest.TestCase):
 
 
     def test_safeTransferFrom(self):
-        res = deploy_contract("H:/XWC/xwc_swap/newtoken.glua.gpc")
+        res = deploy_contract("f:/work/code/xwc_nft/newtoken.glua.gpc")
         assert safeMint(res, "yilixiaoshazi-safecontract") == False
         generate_block()
         assert safeMint("test", "yilixiaoshazi-safecontract") == True
@@ -392,32 +400,31 @@ class ERC721Test(unittest.TestCase):
 
 
 def suite():
-    tests = [
-    "test_mint",
-    "test_mint2",
-    "test_mint_trasfer_approve_loop",
-        "test_mint_approve_all",
-        "test_token_uri",
-        "test_safeTransferFrom",
-        "test_safeMint",
-        "test_batch_mint",
-        "test_offline_function"
-    ]
-    return unittest.TestSuite(map("main", tests))
+    s = unittest.TestSuite()
+    s.addTest(ERC721ForeverTest("test_mint"))
+    s.addTest(ERC721ForeverTest("test_mint2"))
+    s.addTest(ERC721ForeverTest("test_mint_trasfer_approve_loop"))
+    s.addTest(ERC721ForeverTest("test_mint_approve_all"))
+    s.addTest(ERC721ForeverTest("test_token_uri"))
+    s.addTest(ERC721ForeverTest("test_safeTransferFrom"))
+    s.addTest(ERC721ForeverTest("test_safeMint"))
+    s.addTest(ERC721ForeverTest("test_batch_mint"))
+    s.addTest(ERC721ForeverTest("test_offline_function"))
+    return s
 
 
 if __name__ == "__main__":
-    #transfer()
-    suite()
-#
-# if __name__ == "__main__":
+    s = suite()
+    runner = unittest.TextTestRunner()
+    runner.run(s)
+
     token_addr = ""
     swap_addr = ""
     swap_addr1 = ""
     hrc20_token_addr = ""
     swap_token_addr = ""
     current_block = 0
-#
+
 #     print(base64.b64encode(('%s:%s' % ("a", "b")).encode(encoding='utf-8')))
 
 
