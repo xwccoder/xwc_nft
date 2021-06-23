@@ -40,7 +40,7 @@ def request(method,params):
     }
 
     response = requests.request("POST", url, data=payload, headers=headers)
-    # print(response.text)
+    print(response.text)
     return json.loads(response.text)
 
 # 初始化simplechain 测试环境
@@ -72,6 +72,7 @@ def generate_block_10():
         print("generate10 ",res)
     else:
         time.sleep(50)
+
 
 def deploy_contract(contractFile):
     import os
@@ -246,8 +247,9 @@ class AuctionContractTest(unittest.TestCase):
             return  False
 
 
-    def test_normal_trade(self):
+    def test_simple_trade(self):
         tokenId = "token1"
+        symbol = 'XWC'
         assert mint("test", tokenId) == True
         generate_block()
         owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
@@ -255,25 +257,51 @@ class AuctionContractTest(unittest.TestCase):
         assert approve("test", ex_addr, tokenId) == True
         generate_block()
         assert getApproved(tokenId) == ex_addr
-        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},10000000,XWC")
+        auctionInfo = invoke_contract("test", ex_addr, "createAuction", f"{tokenId},{token_addr},10,10000000,XWC,10000")
+        auctionId = auctionInfo['result']['api_result']
         generate_block()
         owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
-        assert owner["result"]["api_result"] == ex_addr
-        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
-        tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
-        assert tokenInfo["price"] == "10000000"
-        deposit_contract("test1", ex_addr, f"{token_addr},{tokenId}", 10000000, 1)
+        self.assertEqual(owner["result"]["api_result"], ex_addr)
+        auctionInfo = invoke_contract_offline("test", ex_addr, "getAuction", f"{auctionId}")
+        auctionInfo = json.loads(auctionInfo['result']['api_result'])
+        self.assertEqual(auctionInfo['symbol'], 'XWC')
+        self.assertEqual(auctionInfo['tokenId'], tokenId)
+        self.assertEqual(auctionInfo['tokenOwner'], 'test')
+        self.assertEqual(auctionInfo['reservePrice'], '10000000')
+        self.assertEqual(auctionInfo['minDeltaPrice'], '10000')
+        self.assertEqual(auctionInfo['tokenContract'], token_addr)
+        self.assertEqual(auctionInfo['amount'], 0)
+        self.assertEqual(auctionInfo['bidder'], "")
+        self.assertEqual(auctionInfo['firstBidTime'], 0)
+        deposit_contract("test1", ex_addr, f"{auctionId}", 10010000, self.token2Id[symbol])
         generate_block()
-        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        info = json.loads(res['result']['api_result'])
-        assert info["totalReward"]["XWC"] == 500000
-        assert info["currentReward"]["XWC"] == 500000
-        invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
+        auctionInfo = invoke_contract_offline("test", ex_addr, "getAuction", f"{auctionId}")
+        auctionInfo = json.loads(auctionInfo['result']['api_result'])
+        self.assertEqual(auctionInfo['symbol'], 'XWC')
+        self.assertEqual(auctionInfo['tokenId'], tokenId)
+        self.assertEqual(auctionInfo['tokenOwner'], 'test')
+        self.assertEqual(auctionInfo['reservePrice'], '10000000')
+        self.assertEqual(auctionInfo['minDeltaPrice'], '10000')
+        self.assertEqual(auctionInfo['tokenContract'], token_addr)
+        self.assertEqual(auctionInfo['amount'], 10010000)
+        self.assertEqual(auctionInfo['bidder'], "test1")
+        # self.assertEqual(auctionInfo['firstBidTime'], current_block)
+        generate_block_10()
+        invoke_contract("test1", ex_addr, "endAuction", f"{auctionId}")
         generate_block()
-        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        info = json.loads(res['result']['api_result'])
-        assert info["totalReward"]["XWC"] == 500000
-        assert info["currentReward"]["XWC"] == 499999
+        owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
+        self.assertEqual(owner["result"]["api_result"], "test1")
+        # generate_block()
+        # res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        # info = json.loads(res['result']['api_result'])
+        # assert info["totalReward"]["XWC"] == 500000
+        # assert info["currentReward"]["XWC"] == 500000
+        # invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
+        # generate_block()
+        # res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        # info = json.loads(res['result']['api_result'])
+        # assert info["totalReward"]["XWC"] == 500000
+        # assert info["currentReward"]["XWC"] == 499999
 
     def test_setFeeRate(self):
         res = invoke_contract("test", ex_addr, "setFeeRate", "-1")
@@ -288,8 +316,8 @@ class AuctionContractTest(unittest.TestCase):
 
 def suite():
     s = unittest.TestSuite()
-    # s.addTest(AuctionContractTest("test_normal_trade"))
-    s.addTest(AuctionContractTest("test_setFeeRate"))
+    s.addTest(AuctionContractTest("test_simple_trade"))
+    # s.addTest(AuctionContractTest("test_setFeeRate"))
     return s
 
 
