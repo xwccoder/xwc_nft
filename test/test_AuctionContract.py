@@ -292,16 +292,16 @@ class AuctionContractTest(unittest.TestCase):
         owner = invoke_contract_offline("test", token_addr, "ownerOf", tokenId)
         self.assertEqual(owner["result"]["api_result"], "test1")
         # generate_block()
-        # res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        # info = json.loads(res['result']['api_result'])
-        # assert info["totalReward"]["XWC"] == 500000
-        # assert info["currentReward"]["XWC"] == 500000
-        # invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
-        # generate_block()
-        # res = invoke_contract_offline("test", ex_addr, "getInfo", "")
-        # info = json.loads(res['result']['api_result'])
-        # assert info["totalReward"]["XWC"] == 500000
-        # assert info["currentReward"]["XWC"] == 499999
+        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        info = json.loads(res['result']['api_result'])
+        self.assertEqual(info["totalReward"]["XWC"], 500500)
+        self.assertEqual(info["currentReward"]["XWC"], 500500)
+        invoke_contract("test", ex_addr, "withdrawReward", "1,XWC")
+        generate_block()
+        res = invoke_contract_offline("test", ex_addr, "getInfo", "")
+        info = json.loads(res['result']['api_result'])
+        assert info["totalReward"]["XWC"] == 500500
+        assert info["currentReward"]["XWC"] == 500499
 
     def test_setFeeRate(self):
         res = invoke_contract("test", ex_addr, "setFeeRate", "-1")
@@ -317,7 +317,7 @@ class AuctionContractTest(unittest.TestCase):
 def suite():
     s = unittest.TestSuite()
     s.addTest(AuctionContractTest("test_simple_trade"))
-    # s.addTest(AuctionContractTest("test_setFeeRate"))
+    s.addTest(AuctionContractTest("test_setFeeRate"))
     return s
 
 

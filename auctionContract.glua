@@ -134,32 +134,18 @@ let function checkContractAddress(addr: string)
 end
 
 let function withdraw_native_asset_private(self:table, from:string, symbol:string, amountStr:string)
-    checkState(self)	
-    print(from)
+    checkState(self)
     let amount = tointeger(amountStr)
-
     if (not symbol) or (#symbol < 1) or (not amount) or (amount <= 0) then
         return error("invalid params")
     end
-    let fromAddress = from
-    let userAssets: table = json.loads(fast_map_get('_nativeBalances', fromAddress) or '{}') or {}
-    let oldBalance = tointeger(userAssets[symbol] or 0)
-    if oldBalance < amount then
-        return error("amount exceed balance")
-    end
-    let newBalance = oldBalance - amount
-    userAssets[symbol] = newBalance
-    let newUserAssetsStr = json.dumps(userAssets)
-
-    fast_map_set('_nativeBalances', fromAddress, newUserAssetsStr)
-
-    let res1 = transfer_from_contract_to_address(fromAddress, symbol, amount)
+    let res1 = transfer_from_contract_to_address(from, symbol, amount)
 	if res1 ~= 0 then
-		return error("transfer asset " .. symbol .. " to " .. fromAddress .. " amount:"..tostring(amount).." error, error code: " .. tostring(res1))
+		return error("transfer asset " .. symbol .. " to " .. from .. " amount:"..tostring(amount).." error, error code: " .. tostring(res1))
     end	
     
     let nativeTransferEventArg = json.dumps({
-        address: fromAddress,
+        address: from,
         symbol: symbol,
         change: - amount,
         reason: 'withdraw'
@@ -175,7 +161,7 @@ let function _createBid(self:table,auctionId:string,amount:string,symbol:string)
     let auctionObject = json.loads(auctionData)
     let lastBidder = auctionObject.bidder
     let block_num = tointeger( get_header_block_num())
-    require(symbol == auctionObject.symbol,"The auction must use the same asset.")
+    require(symbol == auctionObject.symbol, "The auction must use the same asset.")
     require(tointeger(auctionObject.firstBidTime) == tointeger(0) or block_num<(tointeger(auctionObject.firstBidTime)+tointeger(auctionObject.duration)), "Auction expired")
     require(tointeger(amount) > tointeger(auctionObject.reservePrice),"Must send at least reservePrice")
     require(tointeger(amount) > (tointeger(auctionObject.amount)+tointeger(auctionObject.minDeltaPrice)), "Must send more than last bid by minDeltaPrice amount"  )
@@ -323,7 +309,7 @@ function M:endAuction(auctionId:string)
         withdraw_native_asset_private(self,tokenMinter,auctionObject.symbol,copyRightFee)
     end
     fast_map_set("auctions", auctionId, "{}")
-    tokenContract.safeTransferFrom(cur_contract..","..lastBidder..","..auctionObject.tokenId)
+    tokenContract:safeTransferFrom(cur_contract..","..lastBidder..","..auctionObject.tokenId)
     
     let eventArg = json.dumps({auctionId:auctionId,tokenId:auctionObject.tokenId,tokenContract:auctionObject.tokenContract,tokenOwner:auctionObject.tokenOwner,bidder:auctionObject.lastBidder,payValue:pay_value,copyRightFee:copyRightFee})
     emit AuctionEnded(eventArg)
