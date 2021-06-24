@@ -448,7 +448,6 @@ end
 -- args: name symbol
 function M:init_token(arg: string)
     checkAdmin(self)
-    pprint('arg:', arg)
 
     if self.storage.state ~= 'NOT_INITED' then
         return error("this token contract inited before")
