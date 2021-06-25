@@ -429,6 +429,27 @@ class AuctionContractTest(unittest.TestCase):
         auctionInfo = json.loads(auctionInfo['result']['api_result'])
         self.assertEqual(auctionInfo, {})
 
+    def test_cancelAuctionFail(self):
+        tokenId = "cancel_token_fail"
+        symbol = 'ETH'
+        self.assertEqual(mint("test", tokenId), True)
+        generate_block()
+        self.assertEqual(approve("test", ex_addr, tokenId), True)
+        generate_block()
+        auctionInfo = invoke_contract("test", ex_addr, "createAuction", f"{tokenId},{token_addr},10,10000000,{symbol},10000")
+        auctionId = auctionInfo['result']['api_result']
+        generate_block()
+        deposit_contract("test1", ex_addr, f"{auctionId}", 10010000, self.token2Id[symbol])
+        generate_block()
+        res = invoke_contract("test", ex_addr, "cancelAuction", f"{auctionId}")
+        self.assertEqual(res['result']['exec_succeed'], False)
+        self.assertEqual(res['result']['error'], "Auction has already started")
+        generate_block()
+        auctionInfo = invoke_contract_offline("test", ex_addr, "getAuction", f"{auctionId}")
+        auctionInfo = json.loads(auctionInfo['result']['api_result'])
+        self.assertEqual(auctionInfo['amount'], 10010000)
+
+
     def test_setFeeRate(self):
         res = invoke_contract("test", ex_addr, "setFeeRate", "-1")
         assert res['result']['error'] == 'invalid fee rate: -1'
@@ -442,12 +463,13 @@ class AuctionContractTest(unittest.TestCase):
 
 def suite():
     s = unittest.TestSuite()
-    # s.addTest(AuctionContractTest("test_simple_trade"))
+    s.addTest(AuctionContractTest("test_simple_trade"))
     s.addTest(AuctionContractTest("test_complex_trade"))
-    # s.addTest(AuctionContractTest("test_changeAuction"))
-    # s.addTest(AuctionContractTest("test_changeAuctionFail"))
-    # s.addTest(AuctionContractTest("test_cancelAuction"))
-    # s.addTest(AuctionContractTest("test_setFeeRate"))
+    s.addTest(AuctionContractTest("test_changeAuction"))
+    s.addTest(AuctionContractTest("test_changeAuctionFail"))
+    s.addTest(AuctionContractTest("test_cancelAuction"))
+    s.addTest(AuctionContractTest("test_cancelAuctionFail"))
+    s.addTest(AuctionContractTest("test_setFeeRate"))
     return s
 
 
