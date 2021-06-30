@@ -1,4 +1,4 @@
--- ERC721拍卖合约
+-- ERC721售卖合约
 -- add this Contract type when only compile by gluac
 type Contract<T> = {
     storage: T
@@ -241,6 +241,31 @@ function M:sellNft(args:string)
     return info.tokenId
 end
 
+function M:changeSellParam(args:string)
+    checkState(self)
+    let parsed = parse_args(args, 4, "argument format error, need format: tokenId,tokenAddr,price,symbol")
+    let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[3], symbol: parsed[4]}
+    let from_addr = get_from_address()
+    checkContractAddress(info.tokenAddr)
+    let cur_contract = get_current_contract_address()
+    let tokenIdx = info.tokenAddr.."."..info.tokenId
+    let tokenInfoStr = fast_map_get("token_list",tostring(tokenIdx)) or "{}"
+    require(tokenInfoStr ~= "{}","token with Id not in sell list")
+    let tokenInfo = json.loads(tokenInfoStr)
+    require(from_addr == tokenInfo.tokenOwner, "Change sell praram not from owner")
+    tokenInfo.symbol = info.symbol
+    tokenInfo.price = info.price
+    fast_map_set("token_list",tostring(tokenIdx), json.dumps(tokenInfo))
+    let eventArg = json.dumps({
+        tokenId:info.tokenId,
+        tokenContract:info.tokenAddr,
+        price:info.price,
+        tokenOwner:from_addr,
+        symbol:info.symbol
+    })
+    emit AskChanged(eventArg)
+end
+
 -- tokenAddr,tokenId
 function M:on_deposit_asset(jsonstrArgs: string)
     checkState(self)
@@ -255,7 +280,7 @@ function M:on_deposit_asset(jsonstrArgs: string)
 		 return error("on_deposit_asset arg wrong")
     end
     let parsed = parse_args(param, 2, "argument format error, need format: tokenAddr,tokenId")
-    let tokenAddr=tostring(parsed[1])
+    let tokenAddr = tostring(parsed[1])
     checkContractAddress(tokenAddr)
     let tokenId = tostring(parsed[2])
     _buyNft(self, tokenAddr, tokenId, symbol, amount)

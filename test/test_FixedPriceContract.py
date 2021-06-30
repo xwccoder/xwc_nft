@@ -311,12 +311,34 @@ class FixedPriceTest(unittest.TestCase):
         res = invoke_contract("test", ex_addr, "setFeeRate", "51")
         assert res['result']['error'] == 'invalid fee rate: 51'
 
+    def test_changeSellParam(self):
+        tokenId = "tobechanged"
+        self.assertEqual(mint("test", tokenId), True)
+        generate_block()
+        self.assertEqual(approve("test", ex_addr, tokenId), True)
+        generate_block()
+        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},10000,XWC")
+        generate_block()
+        invoke_contract("test", ex_addr, "changeSellParam", f"{tokenId},{token_addr},20000,ETH")
+        generate_block()
+        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
+        tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
+        self.assertEqual(tokenInfo["price"], "20000")
+        self.assertEqual(tokenInfo["symbol"], "ETH")
+        invoke_contract("test1", ex_addr, "changeSellParam", f"{tokenId},{token_addr},30000,XWC")
+        generate_block()
+        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
+        tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
+        self.assertEqual(tokenInfo["price"], "20000")
+        self.assertEqual(tokenInfo["symbol"], "ETH")
+
 
 def suite():
     s = unittest.TestSuite()
-    s.addTest(FixedPriceTest("test_normalTrade"))
-    s.addTest(FixedPriceTest("test_errorSymbolTrade"))
-    s.addTest(FixedPriceTest("test_setFeeRate"))
+    # s.addTest(FixedPriceTest("test_normalTrade"))
+    # s.addTest(FixedPriceTest("test_errorSymbolTrade"))
+    # s.addTest(FixedPriceTest("test_setFeeRate"))
+    s.addTest(FixedPriceTest("test_changeSellParam"))
     return s
 
 
