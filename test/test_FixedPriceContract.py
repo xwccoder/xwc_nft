@@ -332,13 +332,37 @@ class FixedPriceTest(unittest.TestCase):
         self.assertEqual(tokenInfo["price"], "20000")
         self.assertEqual(tokenInfo["symbol"], "ETH")
 
+    def test_revokeSellNft(self):
+        tokenId = "tobechanged"
+        self.assertEqual(mint("test", tokenId), True)
+        generate_block()
+        self.assertEqual(approve("test", ex_addr, tokenId), True)
+        generate_block()
+        invoke_contract("test", ex_addr, "sellNft", f"{tokenId},{token_addr},10000,XWC")
+        generate_block()
+        tokenListStr = invoke_contract_offline("test", ex_addr, "getSellList", "")
+        tokenList = json.loads(tokenListStr['result']['api_result'])
+        print(tokenListStr)
+        self.assertEqual(tokenList[0], f"{token_addr}.tobechanged")
+        invoke_contract("test", ex_addr, "revokeSellNft", f"{tokenId},{token_addr}")
+        generate_block()
+        tokenInfoStr = invoke_contract_offline("test", ex_addr, "getTokenInfo", f"{token_addr},{tokenId}")
+        tokenInfo = json.loads(tokenInfoStr["result"]["api_result"])
+        self.assertEqual("price" in tokenInfo, False)
+        tokenListStr = invoke_contract_offline("test", ex_addr, "getSellList", "")
+        tokenList = json.loads(tokenListStr['result']['api_result'])
+        print(tokenListStr)
+        self.assertEqual(len(tokenList), 0)
+
+
 
 def suite():
     s = unittest.TestSuite()
     # s.addTest(FixedPriceTest("test_normalTrade"))
     # s.addTest(FixedPriceTest("test_errorSymbolTrade"))
     # s.addTest(FixedPriceTest("test_setFeeRate"))
-    s.addTest(FixedPriceTest("test_changeSellParam"))
+    # s.addTest(FixedPriceTest("test_changeSellParam"))
+    s.addTest(FixedPriceTest("test_revokeSellNft"))
     return s
 
 

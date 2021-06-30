@@ -247,7 +247,6 @@ function M:changeSellParam(args:string)
     let info = {tokenId: parsed[1], tokenAddr:parsed[2], price: parsed[3], symbol: parsed[4]}
     let from_addr = get_from_address()
     checkContractAddress(info.tokenAddr)
-    let cur_contract = get_current_contract_address()
     let tokenIdx = info.tokenAddr.."."..info.tokenId
     let tokenInfoStr = fast_map_get("token_list",tostring(tokenIdx)) or "{}"
     require(tokenInfoStr ~= "{}","token with Id not in sell list")
@@ -294,6 +293,40 @@ function M:setFeeRate(fee:string)
     return
 end
 
+function M:revokeSellNft(args:string)
+    checkState(self)
+    let parsed = parse_args(args, 2, "argument format error, need format: tokenId,tokenAddr")
+    let info = {tokenId: parsed[1], tokenAddr:parsed[2]}
+    let from_addr = get_from_address()
+    checkContractAddress(info.tokenAddr)
+    let tokenIdx = info.tokenAddr.."."..info.tokenId
+    let tokenInfoStr = fast_map_get("token_list",tostring(tokenIdx)) or "{}"
+    require(tokenInfoStr ~= "{}","token with Id not in sell list")
+    let tokenInfo = json.loads(tokenInfoStr)
+    require(from_addr == tokenInfo.tokenOwner, "Change sell praram not from owner")
+    let ERC721Object: object = import_contract_from_address(info.tokenAddr)
+    let owner = ERC721Object:ownerOf(info.tokenId)
+    let cur_contract = get_current_contract_address()
+    require(owner == cur_contract,"Caller must be approved or owner for token id")
+    require(ERC721Object:supportsERC721Interface(),"tokenContract does not support ERC721 interface")
+    ERC721Object:transferFrom(cur_contract..","..from_addr..","..info.tokenId)
+    fast_map_set("token_list", tostring(tokenIdx), '{}')
+    let tokensStr = fast_map_get("user_tokens", tokenInfo.tokenOwner) or "[]"
+    let userTokens = json.loads(tokensStr)
+    let idx = tointeger(getArrayIdx(userTokens, tokenIdx))
+    require(idx > 0, "token idx not exist in user token list")
+    table.remove(userTokens, idx)
+    fast_map_set("user_tokens", tokenInfo.tokenOwner, json.dumps(userTokens))
+    let eventArg = json.dumps({
+        tokenId:tokenInfo.tokenId,
+        tokenContract:tokenInfo.tokenAddr,
+        price:tokenInfo.price,
+        tokenOwner:tokenInfo.tokenOwner,
+        symbol:tokenInfo.symbol
+    })
+    emit AskRevoked(eventArg)
+end
+
 -- amount,symbol
 function M:withdrawReward(args:string)
     checkAdmin(self)
@@ -315,6 +348,12 @@ offline function M:getTokenInfo(args:string)
     let tokenIdx = tokenAddr.."."..tokenId
     let data = fast_map_get("token_list",tokenIdx) or "{}"
     return data
+end
+
+offline function M:getSellList()
+    let fromAddr = get_from_address()
+    let tokens = fast_map_get("user_tokens",fromAddr) or "[]"
+    return tokens
 end
 
 offline function M:getInfo()
