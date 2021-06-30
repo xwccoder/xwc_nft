@@ -114,9 +114,10 @@ def invoke_contract_offline(account_name,contract_addr,method,params):
         return res
 
 
-def deposit_contract(account_addr,contract_addr,param,asset_id=0,amount=0):
+def deposit_contract(account_addr,contract_addr,param,amount=0,asset_id=0):
     if is_simplechain:
-        res = request("invoke_contract", [account_addr, contract_addr, "on_deposit_asset", [param], amount, asset_id, 5000000, 1])
+        print("aaaaaaaaaaaaaaaaaa",asset_id)
+        res = request("invoke_contract", [account_addr, contract_addr, "on_deposit_asset", [param], asset_id, amount, 5000000, 1])
         return res
     else:
         res = request("transfer_to_contract",
@@ -135,7 +136,7 @@ def query_native_balance(account_name="test"):
 def do_init():
     if is_simplechain:
         a = query_native_balance("test")
-        if a is None or a == 0:
+        if a is None or len(a['result']) == 0:
             init_simple_chain_env()
             generate_block()
     global token_addr
@@ -374,7 +375,6 @@ class AuctionContractTest(unittest.TestCase):
         self.assertEqual(info["totalReward"][symbol], 521000)
         self.assertEqual(info["currentReward"][symbol], 520999)
 
-
     def test_changeAuction(self):
         tokenId = "change_token"
         symbol = 'XWC'
@@ -388,9 +388,13 @@ class AuctionContractTest(unittest.TestCase):
         res = invoke_contract("test", ex_addr, "setAuctionReservePrice", f"{auctionId},202020")
         self.assertEqual(res['result']['exec_succeed'], True)
         generate_block()
+        res = invoke_contract("test", ex_addr, "setAuctionMinDeltaPrice", f"{auctionId},20000")
+        self.assertEqual(res['result']['exec_succeed'], True)
+        generate_block()
         auctionInfo = invoke_contract_offline("test", ex_addr, "getAuction", f"{auctionId}")
         auctionInfo = json.loads(auctionInfo['result']['api_result'])
         self.assertEqual(auctionInfo['reservePrice'], '202020')
+        self.assertEqual(auctionInfo['minDeltaPrice'], '20000')
 
     def test_changeAuctionFail(self):
         tokenId = "change_token_fail"
@@ -431,7 +435,7 @@ class AuctionContractTest(unittest.TestCase):
 
     def test_cancelAuctionFail(self):
         tokenId = "cancel_token_fail"
-        symbol = 'ETH'
+        symbol = 'XWC'
         self.assertEqual(mint("test", tokenId), True)
         generate_block()
         self.assertEqual(approve("test", ex_addr, tokenId), True)

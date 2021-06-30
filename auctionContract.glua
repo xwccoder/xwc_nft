@@ -261,15 +261,35 @@ function M:setAuctionReservePrice(args:string)
     emit AuctionReservePriceUpdated(eventArg)
 
 end
--- auctionId,amount
 
+-- auctionId,minDeltaPrice
+--[[
+function M:setAuctionMinDeltaPrice(args:string)
+    let from_addr  = get_from_address()
+    let parsed = parse_args(args, 2, "argument format error, need format: to,tokenId")
+    let auctionId=tostring(parsed[1])
+    let minDeltaPrice = tostring(parsed[2])
+    let auctionData = fast_map_get("auctions",auctionId) or "{}"
+    require(auctionData ~= "{}","auction Id not exists")
+    let auctionObject = json.loads(auctionData)
+    require( from_addr ==  auctionObject.tokenOwner, "Must be auction token owner")
+    require(tointeger(auctionObject.firstBidTime) == tointeger(0), "Auction has already started")
+    auctionObject.minDeltaPrice = minDeltaPrice
+    fast_map_set("auctions",auctionId,json.dumps(auctionObject))
+    let eventArg = json.dumps({auctionId:auctionId,tokenId:auctionObject.tokenId,tokenContract:auctionObject.tokenContract,reservePrice:minDeltaPrice})
+
+    emit AuctionMinDeltaPriceUpdated(eventArg)
+
+end
+--]]
 
 function M:on_deposit_asset(jsonstrArgs: string)
-    checkState(self)	
+    checkState(self)
 	let arg = json.loads(jsonstrArgs)
     let amount = tointeger(arg.num)
     let symbol = tostring(arg.symbol)
     let param = tostring(arg.param)
+    print(symbol)
 	if (not amount) or (amount < 0) then
 		 return error("deposit should greater than 0")
 	end
