@@ -298,9 +298,10 @@ class ERC721ForeverTest(unittest.TestCase):
         assert mint("test", "yilixiaoshazi2") == True
         generate_block()
         _all_test_tokens.append("yilixiaoshazi2")
-        assert setApprovalForAll("test","approve",True) == True
+        self.assertEqual(isApprovedForAll("test","approve"), "false")
+        self.assertEqual(setApprovalForAll("test","approve",True), True)
         generate_block()
-        assert bool(isApprovedForAll("test","approve")) == True
+        self.assertEqual(isApprovedForAll("test","approve"), "true")
         assert self.check_test_token_match()
         bak_list = []
         for i in range(len(_all_test_tokens)):
@@ -395,21 +396,33 @@ class ERC721ForeverTest(unittest.TestCase):
         res = invoke_contract_offline("test", token_addr, "symbol", "")
         assert res["result"]["api_result"] == "WORLD"
 
+    def test_withdraw_asset(self):
+        deposit_contract("test", token_addr, "", 1, 10010000)
+        generate_block()
+        res = invoke_contract_offline("test",token_addr,"queryUserAssets","test")
+        assets = json.loads(res["result"]["api_result"])
+        self.assertEqual(assets['XWC'], 10010000)
+        res = invoke_contract_offline("test",token_addr,"withdrawAsset","XWC,10000")
+        generate_block()
+        res = invoke_contract_offline("test",token_addr,"queryUserAssets","test")
+        assets = json.loads(res["result"]["api_result"])
+        self.assertEqual(assets['XWC'], 10010000)
 
 
 
 
 def suite():
     s = unittest.TestSuite()
-    s.addTest(ERC721ForeverTest("test_mint"))
-    s.addTest(ERC721ForeverTest("test_mint2"))
-    s.addTest(ERC721ForeverTest("test_mint_trasfer_approve_loop"))
-    s.addTest(ERC721ForeverTest("test_mint_approve_all"))
-    s.addTest(ERC721ForeverTest("test_token_uri"))
-    s.addTest(ERC721ForeverTest("test_safeTransferFrom"))
-    s.addTest(ERC721ForeverTest("test_safeMint"))
-    s.addTest(ERC721ForeverTest("test_batch_mint"))
-    s.addTest(ERC721ForeverTest("test_offline_function"))
+    # s.addTest(ERC721ForeverTest("test_mint"))
+    # s.addTest(ERC721ForeverTest("test_mint2"))
+    # s.addTest(ERC721ForeverTest("test_mint_trasfer_approve_loop"))
+    # s.addTest(ERC721ForeverTest("test_mint_approve_all"))
+    # s.addTest(ERC721ForeverTest("test_token_uri"))
+    # s.addTest(ERC721ForeverTest("test_safeTransferFrom"))
+    # s.addTest(ERC721ForeverTest("test_safeMint"))
+    # s.addTest(ERC721ForeverTest("test_batch_mint"))
+    # s.addTest(ERC721ForeverTest("test_offline_function"))
+    s.addTest(ERC721ForeverTest("test_withdraw_asset"))
     return s
 
 

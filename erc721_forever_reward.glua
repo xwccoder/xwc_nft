@@ -125,15 +125,12 @@ let function checkAddress(addr: string)
     return result
 end
 
-let function isApprovedForAll(owner:string,operator : string)
+let function isApprovedForAll(owner:string, operator:string)
     let data = (fast_map_get("_operatorApprovals",owner) or "{}")
-
     let json_data:Map<bool> = totable(json.loads(data))
     if not json_data[operator] then
-
         return false
     else
-
         return true
     end
 end
@@ -578,10 +575,7 @@ offline function M:isApprovedForAll(args:string)
     let parsed = parse_args(args, 2, "argument format error, need format: owner,operator")
     let owner= tostring(parsed[1])
     let operator = tostring(parsed[2])
-    let data =fast_map_get("_operatorApprovals", owner) or "{}"
-    let json_data:Map<bool> = totable(json.loads(data))
-    return json_data[operator]
-
+    return isApprovedForAll(owner, operator)
 end
 
 -- from,to,tokenId :string
@@ -683,7 +677,7 @@ function M:setAuctionContract(addr:string)
     end
 end
 
-function M:changeAdmint(addr:string)
+function M:changeAdmin(addr:string)
     checkAdmin(self)
     checkState(self)
     if is_valid_address(addr) then
@@ -762,6 +756,14 @@ function M:feedTradePrice(args:string)
     return
 end
 
+function M:withdrawAsset(args:string)
+    let parsed = parse_args(args, 2, "argument format error, need format: symbol,amount")
+    let fromAddr = get_from_address()
+    let symbol = tostring(parsed[1])
+    let amount = tostring(parsed[2])
+    withdraw_native_asset_private(self, fromAddr, symbol, amount)
+end
+
 offline function M:queryLastTradePrice(tokenId:string)
     let arr = getTradePrice(tokenId)
     return arr
@@ -773,6 +775,10 @@ offline function M:queryTokenMinter(tokenId:string)
     let returnStr = json.dumps({minter:minter,fee:fee})
     return returnStr
 end
-    
+
+offline function M:queryUserAssets(address:string)
+    let userAssets: table = json.loads(fast_map_get('_nativeBalances', address) or '{}') or {}
+    return userAssets
+end
 
 return M
