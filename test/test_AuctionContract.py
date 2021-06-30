@@ -394,7 +394,7 @@ class AuctionContractTest(unittest.TestCase):
         auctionInfo = invoke_contract_offline("test", ex_addr, "getAuction", f"{auctionId}")
         auctionInfo = json.loads(auctionInfo['result']['api_result'])
         self.assertEqual(auctionInfo['reservePrice'], '202020')
-        self.assertEqual(auctionInfo['minDeltaPrice'], '20000')
+        self.assertEqual(auctionInfo['minDeltaPrice'], "20000")
 
     def test_changeAuctionFail(self):
         tokenId = "change_token_fail"

@@ -263,7 +263,6 @@ function M:setAuctionReservePrice(args:string)
 end
 
 -- auctionId,minDeltaPrice
---[[
 function M:setAuctionMinDeltaPrice(args:string)
     let from_addr  = get_from_address()
     let parsed = parse_args(args, 2, "argument format error, need format: to,tokenId")
@@ -281,7 +280,6 @@ function M:setAuctionMinDeltaPrice(args:string)
     emit AuctionMinDeltaPriceUpdated(eventArg)
 
 end
---]]
 
 function M:on_deposit_asset(jsonstrArgs: string)
     checkState(self)
